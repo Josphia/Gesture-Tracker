@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Air Draw Pro</title>
+<style>
+body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
+#video{position:fixed;right:10px;bottom:10px;width:280px;border:2px solid #444;border-radius:12px;transform:scaleX(-1)}
+#canvas{position:fixed;inset:0}
+#panel{position:fixed;top:10px;left:10px;background:rgba(0,0,0,.7);padding:12px;border-radius:12px;z-index:10}
+button{padding:8px 12px;margin:4px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="panel">
+<h3>Air Draw Pro</h3>
+<div>✌️ Blue | 👍 Red | 👌 Green | ✊ Eraser</div>
+<div>🖐 Stop Drawing | Thumb↔Index distance = Brush Size</div>
+<button id="saveBtn">Save PNG</button>
+<button id="clearBtn">Clear</button>
+</div>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const video = document.getElementById("video");
+
+function resize(){
+ canvas.width=window.innerWidth;
+ canvas.height=window.innerHeight;
+}
+resize();
+window.addEventListener("resize",resize);
+
+let lastX=null,lastY=null;
+let drawingColor="cyan";
+let brushSize=6;
+let eraser=false;
+
+function dist(a,b){
+ return Math.hypot(a.x-b.x,a.y-b.y);
+}
+
+function drawLine(x,y){
+ if(lastX===null){lastX=x;lastY=y;return;}
+ ctx.lineCap="round";
+ ctx.lineJoin="round";
+ ctx.lineWidth=brushSize;
+
+ if(eraser){
+   ctx.globalCompositeOperation="destination-out";
+   ctx.shadowBlur=0;
+ }else{
+   ctx.globalCompositeOperation="source-over";
+   ctx.strokeStyle=drawingColor;
+   ctx.shadowColor=drawingColor;
+   ctx.shadowBlur=20;
+ }
+
+ ctx.beginPath();
+ ctx.moveTo(lastX,lastY);
+ ctx.lineTo(x,y);
+ ctx.stroke();
+
+ lastX=x;
+ lastY=y;
+}
+
+function resetDraw(){
+ lastX=null;
+ lastY=null;
+}
+
+document.getElementById("clearBtn").onclick=()=>{
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+};
+
+document.getElementById("saveBtn").onclick=()=>{
+ const a=document.createElement("a");
+ a.href=canvas.toDataURL("image/png");
+ a.download="air-drawing.png";
+ a.click();
+};
+
+const hands = new Hands({
+ locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+ maxNumHands:1,
+ modelComplexity:1,
+ minDetectionConfidence:0.7,
+ minTrackingConfidence:0.7
+});
+
+hands.onResults((results)=>{
+ if(!results.multiHandLandmarks || results.multiHandLandmarks.length===0){
+   resetDraw();
+   return;
+ }
+
+ const lm=results.multiHandLandmarks[0];
+
+ const indexTip=lm[8];
+ const thumbTip=lm[4];
+ const middleTip=lm[12];
+ const ringTip=lm[16];
+ const pinkyTip=lm[20];
+
+ const x=(1-indexTip.x)*canvas.width;
+ const y=indexTip.y*canvas.height;
+
+ brushSize=Math.max(2,Math.min(40,dist(indexTip,thumbTip)*120));
+
+ const fingersUp =
+   (lm[8].y < lm[6].y) +
+   (lm[12].y < lm[10].y) +
+   (lm[16].y < lm[14].y) +
+   (lm[20].y < lm[18].y);
+
+ // Open palm = stop drawing
+ if(fingersUp >= 4){
+   resetDraw();
+   return;
+ }
+
+ // Fist = eraser
+ if(fingersUp === 0){
+   eraser=true;
+ }
+
+ // Peace sign = blue
+ if(
+     lm[8].y < lm[6].y &&
+     lm[12].y < lm[10].y &&
+     lm[16].y > lm[14].y &&
+     lm[20].y > lm[18].y
+   ){
+     drawingColor="dodgerblue";
+     eraser=false;
+   }
+
+ // Index only = draw current color
+ if(
+     lm[8].y < lm[6].y &&
+     lm[12].y > lm[10].y &&
+     lm[16].y > lm[14].y &&
+     lm[20].y > lm[18].y
+   ){
+     eraser=false;
+     drawLine(x,y);
+   } else {
+     resetDraw();
+   }
+
+ // OK-ish gesture => green
+ if(dist(indexTip,thumbTip) < 0.05){
+      drawingColor="lime";
+      eraser=false;
+   }
+
+ // Thumbs-up approximation => red
+ if(
+      thumbTip.y < lm[3].y &&
+      lm[8].y > lm[6].y &&
+      lm[12].y > lm[10].y
+   ){
+      drawingColor="red";
+      eraser=false;
+   }
+});
+
+const camera = new Camera(video,{
+ onFrame: async ()=>{
+   await hands.send({image:video});
+ },
+ width:1280,
+ height:720
+});
+
+camera.start();
+</script>
+</body>
+</html>
