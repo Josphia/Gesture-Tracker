@@ -3,190 +3,281 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Air Draw Pro</title>
+<title>Air Canvas Pro</title>
+
 <style>
-body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
-#video{position:fixed;right:10px;bottom:10px;width:280px;border:2px solid #444;border-radius:12px;transform:scaleX(-1)}
-#canvas{position:fixed;inset:0}
-#panel{position:fixed;top:10px;left:10px;background:rgba(0,0,0,.7);padding:12px;border-radius:12px;z-index:10}
-button{padding:8px 12px;margin:4px;cursor:pointer}
+html,body{
+margin:0;
+overflow:hidden;
+background:#000;
+font-family:Arial,sans-serif;
+}
+#video{
+position:fixed;
+inset:0;
+width:100vw;
+height:100vh;
+object-fit:cover;
+transform:scaleX(-1);
+}
+#drawCanvas,#overlayCanvas{
+position:fixed;
+inset:0;
+}
+#toolbar{
+position:fixed;
+top:15px;
+left:15px;
+z-index:100;
+background:rgba(0,0,0,.55);
+padding:12px;
+border-radius:14px;
+display:flex;
+gap:8px;
+align-items:center;
+}
+.color{
+width:28px;
+height:28px;
+border-radius:50%;
+cursor:pointer;
+border:2px solid white;
+}
+button{
+padding:8px 12px;
+cursor:pointer;
+border:none;
+border-radius:8px;
+}
+#info{
+position:fixed;
+bottom:15px;
+left:15px;
+color:white;
+background:rgba(0,0,0,.5);
+padding:10px;
+border-radius:12px;
+z-index:100;
+}
 </style>
 </head>
 <body>
-<div id="panel">
-<h3>Air Draw Pro</h3>
-<div>✌️ Blue | 👍 Red | 👌 Green | ✊ Eraser</div>
-<div>🖐 Stop Drawing | Thumb↔Index distance = Brush Size</div>
-<button id="saveBtn">Save PNG</button>
-<button id="clearBtn">Clear</button>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="drawCanvas"></canvas>
+<canvas id="overlayCanvas"></canvas>
+
+<div id="toolbar">
+<div class="color" style="background:red" data-color="red"></div>
+<div class="color" style="background:deepskyblue" data-color="deepskyblue"></div>
+<div class="color" style="background:lime" data-color="lime"></div>
+<div class="color" style="background:yellow" data-color="yellow"></div>
+<div class="color" style="background:violet" data-color="violet"></div>
+<div class="color" style="background:white" data-color="white"></div>
+
+<button id="eraser">Eraser</button>
+<button id="clear">Clear</button>
+<button id="save">Save</button>
 </div>
 
-<video id="video" autoplay playsinline></video>
-<canvas id="canvas"></canvas>
+<div id="info">
+☝️ Index finger = Draw<br>
+✌️ Two fingers = Pause/Select<br>
+✊ Fist = Erase
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
 <script>
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
 const video = document.getElementById("video");
+const drawCanvas = document.getElementById("drawCanvas");
+const overlayCanvas = document.getElementById("overlayCanvas");
 
-function resize(){
- canvas.width=window.innerWidth;
- canvas.height=window.innerHeight;
+const drawCtx = drawCanvas.getContext("2d");
+const overlayCtx = overlayCanvas.getContext("2d");
+
+function resize() {
+  drawCanvas.width = overlayCanvas.width = window.innerWidth;
+  drawCanvas.height = overlayCanvas.height = window.innerHeight;
 }
 resize();
-window.addEventListener("resize",resize);
+window.addEventListener("resize", resize);
 
-let lastX=null,lastY=null;
-let drawingColor="cyan";
-let brushSize=6;
-let eraser=false;
+let currentColor = "deepskyblue";
+let eraser = false;
+let lastX = null, lastY = null;
 
-function dist(a,b){
- return Math.hypot(a.x-b.x,a.y-b.y);
-}
+document.querySelectorAll(".color").forEach(el => {
+  el.onclick = () => {
+    currentColor = el.dataset.color;
+    eraser = false;
+  };
+});
 
-function drawLine(x,y){
- if(lastX===null){lastX=x;lastY=y;return;}
- ctx.lineCap="round";
- ctx.lineJoin="round";
- ctx.lineWidth=brushSize;
-
- if(eraser){
-   ctx.globalCompositeOperation="destination-out";
-   ctx.shadowBlur=0;
- }else{
-   ctx.globalCompositeOperation="source-over";
-   ctx.strokeStyle=drawingColor;
-   ctx.shadowColor=drawingColor;
-   ctx.shadowBlur=20;
- }
-
- ctx.beginPath();
- ctx.moveTo(lastX,lastY);
- ctx.lineTo(x,y);
- ctx.stroke();
-
- lastX=x;
- lastY=y;
-}
-
-function resetDraw(){
- lastX=null;
- lastY=null;
-}
-
-document.getElementById("clearBtn").onclick=()=>{
- ctx.clearRect(0,0,canvas.width,canvas.height);
+document.getElementById("eraser").onclick = () => {
+  eraser = true;
 };
 
-document.getElementById("saveBtn").onclick=()=>{
- const a=document.createElement("a");
- a.href=canvas.toDataURL("image/png");
- a.download="air-drawing.png";
- a.click();
+document.getElementById("clear").onclick = () => {
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
 };
+
+document.getElementById("save").onclick = () => {
+  const temp = document.createElement("canvas");
+  temp.width = drawCanvas.width;
+  temp.height = drawCanvas.height;
+  const t = temp.getContext("2d");
+
+  t.translate(temp.width, 0);
+  t.scale(-1, 1);
+  t.drawImage(video, 0, 0, temp.width, temp.height);
+  
+  t.setTransform(1, 0, 0, 1, 0, 0);
+  t.drawImage(drawCanvas, 0, 0);
+
+  const a = document.createElement("a");
+  a.href = temp.toDataURL("image/png");
+  a.download = "air_canvas_pro.png";
+  a.click();
+};
+
+function drawSmooth(x, y, size) {
+  if (lastX === null) {
+    lastX = x;
+    lastY = y;
+    return;
+  }
+
+  const sx = lastX * 0.75 + x * 0.25;
+  const sy = lastY * 0.75 + y * 0.25;
+
+  drawCtx.lineCap = "round";
+  drawCtx.lineJoin = "round";
+  drawCtx.lineWidth = size;
+
+  if (eraser) {
+    drawCtx.globalCompositeOperation = "destination-out";
+    drawCtx.shadowBlur = 0;
+  } else {
+    drawCtx.globalCompositeOperation = "source-over";
+    drawCtx.strokeStyle = currentColor;
+    
+    drawCtx.shadowColor = currentColor;
+    drawCtx.shadowBlur = 20; 
+  }
+
+  drawCtx.beginPath();
+  drawCtx.moveTo(lastX, lastY);
+  drawCtx.lineTo(sx, sy);
+  drawCtx.stroke();
+
+  lastX = sx;
+  lastY = sy;
+}
+
+function resetStroke() {
+  lastX = null;
+  lastY = null;
+}
 
 const hands = new Hands({
- locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
 });
 
 hands.setOptions({
- maxNumHands:1,
- modelComplexity:1,
- minDetectionConfidence:0.7,
- minTrackingConfidence:0.7
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.75,
+  minTrackingConfidence: 0.75
 });
 
-hands.onResults((results)=>{
- if(!results.multiHandLandmarks || results.multiHandLandmarks.length===0){
-   resetDraw();
-   return;
- }
+hands.onResults((results) => {
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
- const lm=results.multiHandLandmarks[0];
+  if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) {
+    resetStroke();
+    return;
+  }
 
- const indexTip=lm[8];
- const thumbTip=lm[4];
- const middleTip=lm[12];
- const ringTip=lm[16];
- const pinkyTip=lm[20];
+  const lm = results.multiHandLandmarks[0];
 
- const x=(1-indexTip.x)*canvas.width;
- const y=indexTip.y*canvas.height;
+  overlayCtx.save();
+  overlayCtx.scale(-1, 1);
+  overlayCtx.translate(-overlayCanvas.width, 0);
 
- brushSize=Math.max(2,Math.min(40,dist(indexTip,thumbTip)*120));
+  drawConnectors(overlayCtx, lm, HAND_CONNECTIONS, { color: "#00FF66", lineWidth: 3 });
+  drawLandmarks(overlayCtx, lm, { color: "#FF007F", radius: 4 });
 
- const fingersUp =
-   (lm[8].y < lm[6].y) +
-   (lm[12].y < lm[10].y) +
-   (lm[16].y < lm[14].y) +
-   (lm[20].y < lm[18].y);
+  overlayCtx.restore();
 
- // Open palm = stop drawing
- if(fingersUp >= 4){
-   resetDraw();
-   return;
- }
+  const indexUp = lm[8].y < lm[6].y;
+  const middleUp = lm[12].y < lm[10].y;
+  const ringUp = lm[16].y < lm[14].y;
+  const pinkyUp = lm[20].y < lm[18].y;
 
- // Fist = eraser
- if(fingersUp === 0){
-   eraser=true;
- }
+  const fingersUp = [indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
 
- // Peace sign = blue
- if(
-     lm[8].y < lm[6].y &&
-     lm[12].y < lm[10].y &&
-     lm[16].y > lm[14].y &&
-     lm[20].y > lm[18].y
-   ){
-     drawingColor="dodgerblue";
-     eraser=false;
-   }
+  const x = (1 - lm[8].x) * drawCanvas.width;
+  const y = lm[8].y * drawCanvas.height;
 
- // Index only = draw current color
- if(
-     lm[8].y < lm[6].y &&
-     lm[12].y > lm[10].y &&
-     lm[16].y > lm[14].y &&
-     lm[20].y > lm[18].y
-   ){
-     eraser=false;
-     drawLine(x,y);
-   } else {
-     resetDraw();
-   }
+  const brush = Math.max(2, Math.min(12, Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y) * 100));
 
- // OK-ish gesture => green
- if(dist(indexTip,thumbTip) < 0.05){
-      drawingColor="lime";
-      eraser=false;
-   }
+  if (fingersUp === 0) {
+    eraser = true; 
+    drawSmooth(x, y, 100);
+    return;
+  }
 
- // Thumbs-up approximation => red
- if(
-      thumbTip.y < lm[3].y &&
-      lm[8].y > lm[6].y &&
-      lm[12].y > lm[10].y
-   ){
-      drawingColor="red";
-      eraser=false;
-   }
+  if (indexUp && middleUp && !ringUp && !pinkyUp) {
+    resetStroke();  
+
+    const elements = document.elementsFromPoint(x, y);
+    elements.forEach(el => {
+      if (el.classList.contains("color")) {
+        currentColor = el.dataset.color;
+        eraser = false;
+      } else if (el.id === "eraser") {
+        eraser = true;
+      } else if (el.id === "clear") {
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      }
+    });
+  } 
+
+  else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+    eraser = false; 
+    drawSmooth(x, y, brush);
+  } else {
+    resetStroke();
+  }
+
+  overlayCtx.beginPath();
+  overlayCtx.arc(x, y, eraser ? 22 : brush / 2 + 4, 0, Math.PI * 2);
+  overlayCtx.fillStyle = eraser ? "rgba(255, 0, 0, 0.4)" : currentColor;
+  overlayCtx.fill();
 });
 
-const camera = new Camera(video,{
- onFrame: async ()=>{
-   await hands.send({image:video});
- },
- width:1280,
- height:720
-});
+navigator.mediaDevices.getUserMedia({
+  video: { width: 1280, height: 720 }
+}).then(stream => {
+  video.srcObject = stream;
+  
+  video.onloadedmetadata = () => {
+    resize();
+  };
 
-camera.start();
+  const camera = new Camera(video, {
+    onFrame: async () => {
+      await hands.send({ image: video });
+    },
+    width: 1280,
+    height: 720
+  });
+
+  camera.start();
+});
 </script>
 </body>
 </html>
