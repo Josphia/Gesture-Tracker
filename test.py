@@ -1,11 +1,16 @@
-s = "abcabcbb"
+s = input()
 
-toCheck = s[0]
+res = 0 
 
-for i in range(1, len(s)):
-    if toCheck+s[i] in s:
-        print(toCheck+s[i])
-        toCheck = toCheck+s[i]
-        
+for i in range(len(s)):
+    toCheck = ""
+    for j in range(i, len(s)):
+        if s[j] not in toCheck:
+            toCheck+= s[j]
+        else:
+            break
 
-print(toCheck)
+    if len(toCheck)>res:
+        res = len(toCheck)
+
+print(res)
