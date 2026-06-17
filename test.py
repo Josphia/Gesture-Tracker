@@ -16,13 +16,18 @@
 # print(res)
 
 
-arr = list(input())#[1,2,3,6,4]#input()
-res = ""
+s = "abcabcbb"#input()
 
-if len(arr) == 1:
-    res = "0"
-else:
-    for i in range(1, len(arr)-1):
-        if arr[i] > arr[i-1] and arr[i] > arr[i+1]:
-            res += str(i)
-print(res[-1])
+count = 0 
+
+for i in range(0, len(s)):
+    toCheck = ""
+    for j in range(i, len(s)):
+        if s[j] not in toCheck:
+            toCheck += s[j]
+        else:
+            break
+        if len(toCheck)>count:
+            count = len(toCheck)
+    
+print(count)
